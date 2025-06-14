@@ -10,57 +10,118 @@ struct LoginView: View {
     @State private var currentCardIndex = 0
     @State private var keyboardHeight: CGFloat = 0
     
+    @State private var charPositions: [(x: CGFloat, y: CGFloat)] = []
+    @State private var charSizes: [CGFloat] = []
+    @State private var isPositionsInitialized = false
+
     // Japanese characters for background animation
-    let japaneseChars = ["Phương Thảo", "xinh gái","😍", "yêu vợ"]
+    let japaneseChars = ["Phương Thảo", "xinh gái","🥰","đáng yêu","Vợ yêu"]
     
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // Animated Background
-                backgroundView(geometry: geometry)
-                
-                // Floating Japanese Characters
-                floatingCharacters(geometry: geometry)
-                
-                // Main Content with keyboard handling
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 0) {
-                        // Top spacing adjusts based on keyboard
-                        Spacer(minLength: keyboardHeight > 0 ? 20 : 80)
-                        
-                        // App Branding Section - hide when keyboard is up
-                        if keyboardHeight == 0 {
-                            brandingSection
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .top).combined(with: .opacity),
-                                    removal: .move(edge: .top).combined(with: .opacity)
-                                ))
-                        }
-                        
-                        // Login Form with Glassmorphism
-                        loginFormSection
-                        
-                        // Bottom spacing adjusts based on keyboard
-                        Spacer(minLength: keyboardHeight > 0 ? 20 : 60)
-                    }
-                }
-                .animation(.easeInOut(duration: 0.3), value: keyboardHeight)
-            }
-        }
-        .navigationBarHidden(true)
-        .onAppear {
-            startAnimations()
-            setupKeyboardObservers()
-        }
-        .onDisappear {
-            removeKeyboardObservers()
-        }
-        .onChange(of: loginViewModel.isLoggedIn) { newValue in
-            withAnimation(.spring(response: 0.8, dampingFraction: 0.6)) {
-                isLoggedIn = newValue
-            }
-        }
-    }
+         GeometryReader { geometry in
+             ZStack {
+                 // Animated Background
+                 backgroundView(geometry: geometry)
+                 
+                 // Floating Japanese Characters
+                 floatingCharacters(geometry: geometry)
+                 
+                 // Main Content with keyboard handling
+                 ScrollView(showsIndicators: false) {
+                     VStack(spacing: 0) {
+                         // Top spacing adjusts based on keyboard
+                         Spacer(minLength: keyboardHeight > 0 ? 20 : 80)
+                         
+                         // App Branding Section - hide when keyboard is up
+                         if keyboardHeight == 0 {
+                             brandingSection
+                                 .transition(.asymmetric(
+                                     insertion: .move(edge: .top).combined(with: .opacity),
+                                     removal: .move(edge: .top).combined(with: .opacity)
+                                 ))
+                         }
+                         
+                         // Login Form with Glassmorphism
+                         loginFormSection
+                         
+                         // Bottom spacing adjusts based on keyboard
+                         Spacer(minLength: keyboardHeight > 0 ? 20 : 60)
+                     }
+                 }
+                 .animation(.easeInOut(duration: 0.3), value: keyboardHeight)
+             }
+         }
+         .navigationBarHidden(true)
+         .onAppear {
+             startAnimations()
+             setupKeyboardObservers()
+         }
+         .onDisappear {
+             removeKeyboardObservers()
+         }
+         // ✨ SIMPLIFIED: Chỉ một listener duy nhất
+         .onChange(of: loginViewModel.isLoggedIn) { newValue in
+             print("🔄 LoginView onChange: loginViewModel.isLoggedIn = \(newValue)")
+             
+             if newValue {
+                 print("🎉 Login successful! Updating parent binding...")
+                 // ✨ SIMPLE & DIRECT
+                 isLoggedIn = true
+                 print("✅ Parent isLoggedIn set to: \(isLoggedIn)")
+             }
+         }
+         // ✨ XÓA: Tất cả UserDefaults listeners khác
+         // ✨ XÓA: onReceive UserDefaults.didChangeNotification
+         // ✨ GIỮ: Chỉ logout notification
+         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("UserDidLogout"))) { _ in
+             print("📡 LoginView received logout notification")
+             loginViewModel.isLoggedIn = false
+             isLoggedIn = false
+         }
+     }
+    private func initializeCharPositions(geometry: GeometryProxy) {
+         guard !isPositionsInitialized else { return }
+         
+         print("🎯 Initializing char positions - ONE TIME ONLY")
+         
+         // Tạo vị trí random một lần
+         charPositions = (0..<8).map { _ in
+             (
+                 x: CGFloat.random(in: 0...geometry.size.width),
+                 y: CGFloat.random(in: 0...geometry.size.height)
+             )
+         }
+         
+         // Tạo size random một lần
+         charSizes = (0..<8).map { index in
+             CGFloat(40 + index * 10)
+         }
+         
+         isPositionsInitialized = true
+         print("✅ Char positions initialized: \(charPositions.count)")
+     }
+     
+     // ✨ THÊM: Get vị trí ổn định cho mỗi character
+     private func getCharPosition(index: Int, geometry: GeometryProxy) -> CGPoint {
+         guard index < charPositions.count else {
+             // Fallback nếu chưa khởi tạo
+             return CGPoint(x: 100, y: 100)
+         }
+         
+         return CGPoint(
+             x: charPositions[index].x,
+             y: charPositions[index].y
+         )
+     }
+     
+     // ✨ THÊM: Get size ổn định cho mỗi character
+     private func getCharSize(index: Int) -> CGFloat {
+         guard index < charSizes.count else {
+             return 40 + CGFloat(index * 10) // Fallback
+         }
+         
+         return charSizes[index]
+     }
     
     // MARK: - Background View
     private func backgroundView(geometry: GeometryProxy) -> some View {
@@ -105,18 +166,23 @@ struct LoginView: View {
     private func floatingCharacters(geometry: GeometryProxy) -> some View {
         ZStack {
             ForEach(0..<8, id: \.self) { index in
-                Text(japaneseChars[index % japaneseChars.count])
-                    .font(.system(size: 40 + CGFloat(index * 10), weight: .thin))
-                    .foregroundColor(.white.opacity(0.1))
-                    .position(
-                        x: CGFloat.random(in: 0...geometry.size.width),
-                        y: CGFloat.random(in: 0...geometry.size.height)
-                    )
+                let char = japaneseChars[index % japaneseChars.count]
+                
+                Text(char)
+                    .font(getBeautifulFont(for: char, index: index))
+                    .foregroundStyle(getGradientForChar(char))
+                    .position(getCharPosition(index: index, geometry: geometry))
                     .rotation3DEffect(
                         .degrees(animateBackground ? 360 : 0),
                         axis: (x: 0, y: 1, z: 0)
                     )
                     .scaleEffect(animateBackground ? 1.2 : 0.8)
+                    .shadow(
+                        color: getShadowColorForChar(char),
+                        radius: 10,
+                        x: 0,
+                        y: 0
+                    )
                     .animation(
                         .easeInOut(duration: 4 + Double(index))
                         .repeatForever(autoreverses: true)
@@ -124,6 +190,80 @@ struct LoginView: View {
                         value: animateBackground
                     )
             }
+        }
+        .onAppear {
+            print("✅ Using working fonts: Alex Brush & Dancing Script")
+            initializeCharPositions(geometry: geometry)
+        }
+    }
+
+    // ✨ THÊM: Mix fonts đẹp mắt
+    private func getBeautifulFont(for char: String, index: Int) -> Font {
+        let size = getCharSize(index: index)
+        
+        switch char {
+        case "Phương Thảo":
+            // Font cursive đẹp cho tên vợ
+            return .custom("AlexBrush-Regular", size: size + 8)
+        case "xinh gái":
+            // Font dancing script cho "xinh gái"
+            return .custom("DancingScript-Medium", size: size + 4)
+        case "😍":
+            // Emoji giữ system font
+            return .system(size: size + 3, weight: .bold, design: .rounded)
+        case "yêu vợ":
+            // Font đậm cho "yêu vợ"
+            return .custom("DancingScript-Bold", size: size + 10)
+        default:
+            // Default dancing script
+            return .custom("DancingScript-Regular", size: size)
+        }
+    }
+
+    // ✨ THÊM: Gradient đẹp cho từng text
+    private func getGradientForChar(_ char: String) -> LinearGradient {
+        switch char {
+        case "Phương Thảo":
+            return LinearGradient(
+                colors: [.pink.opacity(0.25), .purple.opacity(0.15)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case "xinh gái":
+            return LinearGradient(
+                colors: [.cyan.opacity(0.2), .blue.opacity(0.12)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        case "😍":
+            return LinearGradient(
+                colors: [.red.opacity(0.25), .pink.opacity(0.15)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        case "yêu vợ":
+            return LinearGradient(
+                colors: [.yellow.opacity(0.2), .orange.opacity(0.12)],
+                startPoint: .topTrailing,
+                endPoint: .bottomLeading
+            )
+        default:
+            return LinearGradient(
+                colors: [.white.opacity(0.12), .white.opacity(0.06)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+
+    // ✨ THÊM: Shadow colors
+    private func getShadowColorForChar(_ char: String) -> Color {
+        switch char {
+        case "Phương Thảo": return .pink.opacity(0.4)
+        case "xinh gái": return .cyan.opacity(0.4)
+        case "😍": return .red.opacity(0.5)
+        case "yêu vợ": return .yellow.opacity(0.4)
+        default: return .white.opacity(0.3)
         }
     }
     
@@ -168,7 +308,8 @@ struct LoginView: View {
                     
                     // Logo symbol
                     Text("愛")
-                        .font(.system(size: 45, weight: .ultraLight))
+                        .font(.custom("KaiseiDecol-Regular",size: 80))
+
                         .foregroundColor(.white)
                         .shadow(color: .cyan, radius: 10)
                 }
@@ -207,12 +348,12 @@ struct LoginView: View {
             VStack(spacing: 25) {
                 // Header
                 VStack(spacing: 12) {
-                    Text("Hế lô vợ yêu<3")
-                        .font(.system(size: 28, weight: .bold))
+                    Text("Hế lô vợ yêu 💞")
+                        .font(.custom("Cabin",size: 28))
                         .foregroundColor(.white)
                     
-                    Text("Bắt đầu học thôi nào vợ yêuuu😘")
-                        .font(.system(size: 15))
+                    Text("Bắt đầu học thôi nào vợ yêuuu 😘")
+                        .font(.custom("Cabin",size: 18))
                         .foregroundColor(.white.opacity(0.8))
                 }
                 
@@ -291,8 +432,8 @@ struct LoginView: View {
                             HStack(spacing: 10) {
                                 Image(systemName: "arrow.right.circle.fill")
                                     .font(.title3)
-                                Text("Sign In")
-                                    .font(.system(size: 16, weight: .semibold))
+                                Text("Đăng Nhập")
+                                    .font(.custom("Huninn-Regular", size: 20))
                             }
                             .foregroundColor(.white)
                         }

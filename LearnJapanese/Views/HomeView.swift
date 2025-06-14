@@ -69,13 +69,13 @@ struct HomeView: View {
         .onAppear {
             startAnimations()
         }
-        .sheet(isPresented: $showingStudy) {
+        .fullScreenCover(isPresented: $showingStudy) {
             StudyView()
         }
-        .sheet(isPresented: $showingQuiz) {
+        .fullScreenCover(isPresented: $showingQuiz) {
             QuizView()
         }
-        .sheet(isPresented: $showingProgress) {
+        .fullScreenCover(isPresented: $showingProgress) {
             ProgressDetailView()
         }
         .sheet(isPresented: $showImagePicker) {
@@ -153,17 +153,17 @@ struct HomeView: View {
                         }
                         
                         Text("Học viên tiếng Nhật")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.custom("Cabin",size: 16))
                             .foregroundColor(.white.opacity(0.8))
                         
                         // Stats row
                         HStack(spacing: 20) {
                             VStack(spacing: 4) {
                                 Text("142")
-                                    .font(.system(size: 18, weight: .bold))
+                                    .font(.custom("Cabin",size: 18))
                                     .foregroundColor(.white)
                                 Text("Từ đã học")
-                                    .font(.system(size: 12))
+                                    .font(.custom("Cabin",size: 12))
                                     .foregroundColor(.white.opacity(0.7))
                             }
                             
@@ -173,10 +173,10 @@ struct HomeView: View {
                             
                             VStack(spacing: 4) {
                                 Text("7")
-                                    .font(.system(size: 18, weight: .bold))
+                                    .font(.custom("Cabin",size: 18))
                                     .foregroundColor(.white)
                                 Text("Ngày streak")
-                                    .font(.system(size: 12))
+                                    .font(.custom("Cabin",size: 12))
                                     .foregroundColor(.white.opacity(0.7))
                             }
                             
@@ -186,10 +186,10 @@ struct HomeView: View {
                             
                             VStack(spacing: 4) {
                                 Text("89%")
-                                    .font(.system(size: 18, weight: .bold))
+                                    .font(.custom("Cabin",size: 18))
                                     .foregroundColor(.white)
                                 Text("Độ chính xác")
-                                    .font(.system(size: 12))
+                                    .font(.custom("Cabin",size: 12))
                                     .foregroundColor(.white.opacity(0.7))
                             }
                         }
@@ -246,10 +246,10 @@ struct HomeView: View {
                 }) {
                     HStack(spacing: 12) {
                         Image(systemName: "arrow.right.square")
-                            .font(.system(size: 18))
+                            .font(.custom("Cabin",size: 18))
                         
                         Text("Đăng xuất")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.custom("Cabin",size: 16))
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
@@ -371,17 +371,17 @@ struct HomeView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("おかえりなさい! 🌸")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.custom("KaiseiDecol-Regular",size: 16))
                         .foregroundColor(.white.opacity(0.9))
                     
                     if let username = UserDefaults.standard.string(forKey: Constants.Storage.username) {
                         Text(username)
-                            .font(.system(size: 28, weight: .bold))
+                            .font(.custom("Cabin",size: 28))
                             .foregroundColor(.white)
                     }
                     
                     Text("Xin chào vợ yêuuu😍")
-                        .font(.system(size: 14, weight: .regular))
+                        .font(.custom("Cabin",size: 16))
                         .foregroundColor(.white.opacity(0.8))
                 }
                 
@@ -425,7 +425,7 @@ struct HomeView: View {
                             .fill(Color.red)
                             .frame(width: 16, height: 16)
                             .overlay(
-                                Text("3")
+                                Text("0")
                                     .font(.system(size: 10, weight: .bold))
                                     .foregroundColor(.white)
                             )
@@ -458,11 +458,11 @@ struct HomeView: View {
             
             VStack(alignment: .leading, spacing: 2) {
                 Text("7 ngày Thử thách!")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.custom("Cabin",size: 18))
                     .foregroundColor(.white)
                 
                 Text("Tiếp tục phát huy vợ nhé!! 🎯")
-                    .font(.system(size: 12))
+                    .font(.custom("Cabin",size: 15))
                     .foregroundColor(.white.opacity(0.8))
             }
             
@@ -525,11 +525,15 @@ struct HomeView: View {
             // Study Card - Featured
             FeaturedActionCard(
                 icon: "graduationcap.fill",
-                title: "Tiếp tục học tập",
-                subtitle: "15 từ vựng đang chờ ôn tập",
+                title: "Từ Vựng",
+                subtitle: "Tổng hợp từ vựng theo chủ đề đang chờ ôn tập",
                 progress: 0.65,
                 gradient: [Color(hex: "667eea"), Color(hex: "764ba2")],
-                action: { showingStudy = true },
+                action: {
+                    withAnimation(.spring()) {
+                        showingStudy = true
+                    }
+                },
                 index: 0
             )
             
@@ -540,7 +544,11 @@ struct HomeView: View {
                     title: "Làm bài quiz",
                     subtitle: "Kiểm tra kiến thức",
                     gradient: [Color(hex: "11998e"), Color(hex: "38ef7d")],
-                    action: { showingQuiz = true },
+                    action: {
+                        withAnimation(.spring()) {
+                            showingQuiz = true
+                        }
+                    },
                     index: 1
                 )
                 
@@ -549,7 +557,11 @@ struct HomeView: View {
                     title: "Tiến độ",
                     subtitle: "Xem thống kê",
                     gradient: [Color(hex: "fc466b"), Color(hex: "3f5efb")],
-                    action: { showingProgress = true },
+                    action: {
+                        withAnimation(.spring()) {
+                            showingProgress = true
+                        }
+                    },
                     index: 2
                 )
             }
@@ -725,12 +737,16 @@ struct StatMiniCard: View {
                 value: animate
             )
             
+            // 🎯 Số liệu dùng Cabin Bold
             Text(value)
-                .font(.system(size: 18, weight: .bold))
+                .font(.custom("Cabin", size: 20))
+                .fontWeight(.bold)
                 .foregroundColor(.white)
             
+            // 🎯 Label dùng Cabin Regular
             Text(label)
-                .font(.system(size: 11, weight: .medium))
+                .font(.custom("Cabin", size: 15))
+                .fontWeight(.medium)
                 .foregroundColor(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -750,7 +766,6 @@ struct StatMiniCard: View {
         }
     }
 }
-
 // MARK: - Featured Action Card
 struct FeaturedActionCard: View {
     let icon: String
@@ -788,11 +803,13 @@ struct FeaturedActionCard: View {
                 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(title)
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.custom("Cabin", size: 20))
+                        .fontWeight(.medium)
                         .foregroundColor(.white)
                     
                     Text(subtitle)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.custom("Cabin", size: 16))
+                        .fontWeight(.medium)
                         .foregroundColor(.white.opacity(0.8))
                 }
                 
@@ -853,6 +870,7 @@ struct FeaturedActionCard: View {
 }
 
 // MARK: - Action Card Component
+
 struct ActionCard: View {
     let icon: String
     let title: String
@@ -864,34 +882,37 @@ struct ActionCard: View {
     
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.white.opacity(0.2))
-                            .frame(width: 40, height: 40)
-                        
-                        Image(systemName: icon)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
+            // 🎯 Sử dụng VStack với center alignment
+            VStack(spacing: 12) {
+                // Icon ở trên cùng - căn giữa
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 45, height: 45)
                     
-                    Spacer()
+                    Image(systemName: icon)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.white)
                 }
                 
-                VStack(alignment: .leading, spacing: 6) {
+                // Text section ở giữa - căn giữa
+                VStack(spacing: 4) {
                     Text(title)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.custom("Cabin", size: 18))
+                        .fontWeight(.bold)
                         .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
                     
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.custom("Cabin", size: 15))
+                        .fontWeight(.medium)
                         .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
                 }
-                
-                Spacer()
             }
-            .padding(18)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(16)
             .frame(height: 120)
             .background(
                 RoundedRectangle(cornerRadius: 16)
@@ -919,6 +940,7 @@ struct ActionCard: View {
     }
 }
 
+
 // MARK: - Quick Action Button
 struct QuickActionButton: View {
     let icon: String
@@ -940,13 +962,15 @@ struct QuickActionButton: View {
                 }
                 
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.custom("Cabin", size: 16))
+                    .fontWeight(.bold)
                     .foregroundColor(.white)
                 
                 Spacer()
                 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.custom("Cabin", size: 16))
+                    .fontWeight(.bold)
                     .foregroundColor(.white.opacity(0.5))
             }
             .padding(.horizontal, 16)
@@ -970,49 +994,118 @@ struct QuickActionButton: View {
     }
 }
 
-// MARK: - Temporary Views
-struct StudyView: View {
-    var body: some View {
-        NavigationView {
-            VStack {
-                Text("📚 Màn hình học tập")
-                    .font(.largeTitle)
-                Text("Đang phát triển...")
-                    .foregroundColor(.secondary)
-            }
-            .navigationTitle("Học tập")
-            .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-}
+//// MARK: - Temporary Views
+//struct StudyView: View {
+//    var body: some View {
+//        NavigationView {
+//            VStack {
+//                Text("📚 Màn hình học tập")
+//                    .font(.largeTitle)
+//                Text("Đang phát triển...")
+//                    .foregroundColor(.secondary)
+//            }
+//            .navigationTitle("Học tập")
+//            .navigationBarTitleDisplayMode(.inline)
+//        }
+//    }
+//}
 
 struct QuizView: View {
+    @Environment(\.presentationMode) var presentationMode
+    
     var body: some View {
         NavigationView {
-            VStack {
-                Text("🧠 Màn hình Quiz")
-                    .font(.largeTitle)
-                Text("Đang phát triển...")
-                    .foregroundColor(.secondary)
+            ZStack {
+                LinearGradient(
+                    colors: [Color(hex: "667eea"), Color(hex: "764ba2")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                
+                VStack(spacing: 30) {
+                    // Close button
+                    HStack {
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 25)
+                    .padding(.top, 20)
+                    
+                    Spacer()
+                    
+                    VStack(spacing: 20) {
+                        Text("🧠")
+                            .font(.system(size: 80))
+                        
+                        Text("Màn hình Quiz")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.white)
+                        
+                        Text("Đang phát triển...")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                    
+                    Spacer()
+                }
             }
-            .navigationTitle("Quiz")
-            .navigationBarTitleDisplayMode(.inline)
         }
+        .navigationBarHidden(true)
     }
 }
 
 struct ProgressDetailView: View {
+    @Environment(\.presentationMode) var presentationMode
+
     var body: some View {
         NavigationView {
-            VStack {
-                Text("📊 Màn hình Tiến độ")
-                    .font(.largeTitle)
-                Text("Đang phát triển...")
-                    .foregroundColor(.secondary)
+            ZStack {
+                LinearGradient(
+                    colors: [Color(hex: "667eea"), Color(hex: "764ba2")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                
+                VStack(spacing: 30) {
+                    // Close button
+                    HStack {
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 25)
+                    .padding(.top, 20)
+                    
+                    Spacer()
+                    
+                    VStack(spacing: 20) {
+                        Text("🧠")
+                            .font(.system(size: 80))
+                        
+                        Text("📊 Màn hình Tiến độ")
+                            .font(.largeTitle)
+                        Text("Đang phát triển...")
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                }
             }
-            .navigationTitle("Tiến độ")
-            .navigationBarTitleDisplayMode(.inline)
         }
+        .navigationBarHidden(true)
     }
 }
 

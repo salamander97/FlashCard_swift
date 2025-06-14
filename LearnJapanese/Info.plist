@@ -8,5 +8,18 @@
 		<string>ja</string>
 		<string>vi</string>
 	</array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>KaiseiDecol-Medium.ttf</string>
+		<string>Cabin.ttf</string>
+		<string>KaiseiDecol-Regular.ttf</string>
+		<string>KaiseiDecol-Bold.ttf</string>
+		<string>DancingScript-SemiBold.ttf</string>
+		<string>AlexBrush-Regular.ttf</string>
+		<string>DancingScript-Bold.ttf</string>
+		<string>DancingScript-Medium.ttf</string>
+		<string>DancingScript-Regular.ttf</string>
+		<string>Fonts provided by application</string>
+	</array>
 </dict>
 </plist>
