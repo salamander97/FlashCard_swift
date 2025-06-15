@@ -1010,56 +1010,56 @@ struct QuickActionButton: View {
 //    }
 //}
 
-struct QuizView: View {
-    @Environment(\.presentationMode) var presentationMode
-    
-    var body: some View {
-        NavigationView {
-            ZStack {
-                LinearGradient(
-                    colors: [Color(hex: "667eea"), Color(hex: "764ba2")],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-                
-                VStack(spacing: 30) {
-                    // Close button
-                    HStack {
-                        Button(action: {
-                            presentationMode.wrappedValue.dismiss()
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(.white.opacity(0.8))
-                        }
-                        Spacer()
-                    }
-                    .padding(.horizontal, 25)
-                    .padding(.top, 20)
-                    
-                    Spacer()
-                    
-                    VStack(spacing: 20) {
-                        Text("🧠")
-                            .font(.system(size: 80))
-                        
-                        Text("Màn hình Quiz")
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundColor(.white)
-                        
-                        Text("Đang phát triển...")
-                            .font(.system(size: 16))
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                    
-                    Spacer()
-                }
-            }
-        }
-        .navigationBarHidden(true)
-    }
-}
+//struct QuizView: View {
+//    @Environment(\.presentationMode) var presentationMode
+//    
+//    var body: some View {
+//        NavigationView {
+//            ZStack {
+//                LinearGradient(
+//                    colors: [Color(hex: "667eea"), Color(hex: "764ba2")],
+//                    startPoint: .topLeading,
+//                    endPoint: .bottomTrailing
+//                )
+//                .ignoresSafeArea()
+//                
+//                VStack(spacing: 30) {
+//                    // Close button
+//                    HStack {
+//                        Button(action: {
+//                            presentationMode.wrappedValue.dismiss()
+//                        }) {
+//                            Image(systemName: "xmark.circle.fill")
+//                                .font(.system(size: 24))
+//                                .foregroundColor(.white.opacity(0.8))
+//                        }
+//                        Spacer()
+//                    }
+//                    .padding(.horizontal, 25)
+//                    .padding(.top, 20)
+//                    
+//                    Spacer()
+//                    
+//                    VStack(spacing: 20) {
+//                        Text("🧠")
+//                            .font(.system(size: 80))
+//                        
+//                        Text("Màn hình Quiz")
+//                            .font(.system(size: 28, weight: .bold))
+//                            .foregroundColor(.white)
+//                        
+//                        Text("Đang phát triển...")
+//                            .font(.system(size: 16))
+//                            .foregroundColor(.white.opacity(0.8))
+//                    }
+//                    
+//                    Spacer()
+//                }
+//            }
+//        }
+//        .navigationBarHidden(true)
+//    }
+//}
 
 struct ProgressDetailView: View {
     @Environment(\.presentationMode) var presentationMode

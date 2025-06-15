@@ -99,9 +99,36 @@ struct StudyView: View {
                     .padding(.horizontal, 20)
                 }
             }
+            .onAppear {
+                        Task {
+                            do {
+                                let categories = try await apiService.getCategories()
+                                self.categories = categories
+                                print("Load categories")
+
+                            } catch {
+                                print("❌ Không thể load categories: \(error)")
+                            }
+                        }
+                    }
             .navigationBarHidden(true)
         }
-        .fullScreenCover(isPresented: $showingFlashcards) {
+//        .fullScreenCover(isPresented: $showingFlashcards) {
+//            if let category = selectedCategory, let level = selectedLevel {
+//                FlashcardStudyView(category: category, level: level)
+//            }
+//        }
+        .fullScreenCover(isPresented: $showingFlashcards, onDismiss: {
+            Task {
+                do {
+                    let categories = try await apiService.getCategories()
+                    self.categories = categories
+                    print("Load categories (onDismiss)")
+                } catch {
+                    print("❌ Không thể load categories (onDismiss): \(error)")
+                }
+            }
+        }) {
             if let category = selectedCategory, let level = selectedLevel {
                 FlashcardStudyView(category: category, level: level)
             }
@@ -378,6 +405,9 @@ struct StudyView: View {
             do {
                 print("🔄 Loading categories...")
                 let allCategories = try await apiService.getCategories()
+                for category in categories {
+                               print("Category \(category.name) có \(category.totalWords) từ")
+                           }
                 print("📥 Received \(allCategories.count) categories")
                 
                 await MainActor.run {
@@ -830,13 +860,16 @@ struct FlashcardStudyView: View {
                     Spacer()
                     
                     // Flashcard
-                    if !words.isEmpty {
+                    if showCompletionScreen || currentIndex >= words.count {
+                        completionView
+                    } else if !words.isEmpty {
                         flashcardView
                     } else if isLoading {
                         loadingView
                     } else {
                         emptyView
                     }
+
                     
                     Spacer()
                     
@@ -1126,39 +1159,45 @@ struct FlashcardStudyView: View {
     
     // MARK: - Flashcard
     private var flashcardView: some View {
-        let currentWord = words[currentIndex]
-        
-        return ZStack {
-            // Card background
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white)
-                .shadow(color: .black.opacity(0.2), radius: 15, x: 0, y: 8)
-            
-            // Nội dung thẻ (front/back)
-            if !isFlipped {
-                frontSide(word: currentWord)
+        Group {
+            if currentIndex < words.count {
+                let currentWord = words[currentIndex]
+                ZStack {
+                    // Card background
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.white)
+                        .shadow(color: .black.opacity(0.2), radius: 15, x: 0, y: 8)
+                    
+                    // Nội dung thẻ (front/back)
+                    if !isFlipped {
+                        frontSide(word: currentWord)
+                    } else {
+                        backSide(word: currentWord)
+                            .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+                    }
+                }
+                .frame(width: UIScreen.main.bounds.width - 40, height: 300)
+                .rotation3DEffect(.degrees(isFlipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
+                .offset(dragOffset)
+                .rotationEffect(.degrees(Double(dragOffset.width / 10)))
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            dragOffset = value.translation
+                        }
+                        .onEnded { value in
+                            handleSwipe(translation: value.translation)
+                        }
+                )
+                .onTapGesture {
+                    flipCard()
+                }
             } else {
-                backSide(word: currentWord)
-                    .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0)) // Lật lại chữ mặt sau
+                completionView
             }
         }
-        .frame(width: UIScreen.main.bounds.width - 40, height: 300)
-        .rotation3DEffect(.degrees(isFlipped ? 180 : 0), axis: (x: 0, y: 1, z: 0)) // Áp lên cả card
-        .offset(dragOffset)
-        .rotationEffect(.degrees(Double(dragOffset.width / 10)))
-        .gesture(
-            DragGesture()
-                .onChanged { value in
-                    dragOffset = value.translation
-                }
-                .onEnded { value in
-                    handleSwipe(translation: value.translation)
-                }
-        )
-        .onTapGesture {
-            flipCard()
-        }
     }
+
     private func flashcardBackground(colors: [Color]) -> some View {
         ZStack {
             // Gradient nhiều lớp cho chiều sâu
@@ -1328,8 +1367,13 @@ struct FlashcardStudyView: View {
             // Next button
             Button(action: nextCard) {
                 HStack {
-                    Text("Sau")
-                    Image(systemName: "chevron.right")
+                    if currentIndex < words.count - 1 {
+                               Text("Sau")
+                               Image(systemName: "chevron.right")
+                           } else {
+                               Text("Hoàn thành")
+                               Image(systemName: "checkmark")
+                           }
                 }
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(Color(red: 0.2, green: 0.5, blue: 0.3))
@@ -1339,7 +1383,7 @@ struct FlashcardStudyView: View {
                 .clipShape(Capsule())
                 .shadow(color: .black.opacity(0.1), radius: 3, x: 0, y: 2)
             }
-            .disabled(currentIndex >= words.count - 1)
+            .disabled(currentIndex >= words.count)
             .opacity(currentIndex >= words.count - 1 ? 0.5 : 1.0)
         }
         .padding(.horizontal, 20)
@@ -1418,21 +1462,58 @@ struct FlashcardStudyView: View {
         }
     }
     
+//    private func nextCard() {
+//        if currentIndex < words.count - 1 {
+//            withAnimation(.spring()) {
+//                currentIndex += 1
+//                isFlipped = false
+//                studiedCount += 1
+//            }
+//        } else if currentIndex == words.count - 1 {
+//            // Bấm lần cuối cùng, tăng index để ẩn flashcard và show completion
+//            withAnimation(.spring()) {
+//                studiedCount += 1
+//                currentIndex += 1
+//                showCompletionScreen = true
+//            }
+//        }
+//    }
     private func nextCard() {
-        guard currentIndex < words.count - 1 else {
-            // ✨ Session completed!
-            withAnimation(.spring()) {
-                showCompletionScreen = true
-            }
+        guard currentIndex < words.count else {
+            // Đã học hết, không làm gì nữa
             return
         }
+        let word = words[currentIndex]
         
+        // Gọi cập nhật knowledge cho từ này (với mức 'Bình thường')
+        Task {
+            do {
+                // Thay đổi các giá trị dưới nếu bạn muốn logic SRS khác!
+                // Nếu bạn có tính toán knowledgeLevel, easeFactor... thì truyền vào, còn nếu không chỉ cần wordId và difficulty
+                try await apiService.updateWordKnowledge(
+                    wordId: word.id,
+                    knowledgeLevel: 0,     // hoặc giá trị đúng (nếu có)
+                    easeFactor: 2.5,       // hoặc giá trị đúng (nếu có)
+                    intervalDays: 1,       // hoặc giá trị đúng (nếu có)
+                    nextReviewDate: Date().addingTimeInterval(24*3600) // hoặc tính đúng theo SRS
+                )
+                print("✅ Đã cập nhật tiến độ từ vựng cho từ id: \(word.id)")
+            } catch {
+                print("❌ Lỗi khi cập nhật knowledge: \(error)")
+            }
+        }
+        
+        // Chuyển sang thẻ tiếp theo hoặc hoàn thành session
         withAnimation(.spring()) {
             currentIndex += 1
             isFlipped = false
             studiedCount += 1
+            if currentIndex == words.count {
+                showCompletionScreen = true
+            }
         }
     }
+
     private func previousCard() {
         guard currentIndex > 0 else { return }
         
