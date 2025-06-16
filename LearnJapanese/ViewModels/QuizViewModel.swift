@@ -8,6 +8,21 @@
 import Foundation
 import SwiftUI
 
+// ✅ GIỮ LẠI: enum QuizDifficulty ở đầu file
+enum QuizDifficulty: String, CaseIterable {
+    case easy = "Dễ"
+    case medium = "Trung bình"
+    case hard = "Khó"
+
+    var timeLimit: Int {
+        switch self {
+        case .easy: return 20
+        case .medium: return 15
+        case .hard: return 10
+        }
+    }
+}
+
 @MainActor
 class QuizViewModel: ObservableObject {
     // MARK: - Published Properties
@@ -25,6 +40,14 @@ class QuizViewModel: ObservableObject {
     @Published var categories: [Category] = []
     @Published var quizMode: QuizMode = .multiple_choice
     @Published var numberOfQuestions = 10
+    @Published var quizDifficulty: QuizDifficulty = .easy
+    @Published var timeRemaining: Int = 20
+    @Published var showTimer: Bool = true
+    @Published var autoNextQuestion: Bool = false
+    @Published var autoNextDelay: Double = 1.5
+    
+    private var questionTimer: Timer?
+    private var autoNextTimer: Timer?
     
     // Quiz Statistics
     @Published var correctAnswers = 0
@@ -32,6 +55,9 @@ class QuizViewModel: ObservableObject {
     @Published var totalTime: TimeInterval = 0
     @Published var questionStartTime = Date()
     @Published var userAnswers: [QuizUserAnswer] = []
+    
+    // ✅ THÊM: property totalAnswered bị thiếu
+    @Published var totalAnswered = 0
     
     private let apiService = APIService.shared
     private var sessionStartTime = Date()
@@ -60,6 +86,181 @@ class QuizViewModel: ObservableObject {
     // MARK: - Initialization
     init() {
         loadCategories()
+        loadAutoNextSettings()
+    }
+    
+    // MARK: - Auto Next Settings
+    func setAutoNext(_ enabled: Bool) {
+        autoNextQuestion = enabled
+        UserDefaults.standard.set(enabled, forKey: "quiz_auto_next_enabled")
+        print("🔄 Auto next câu hỏi: \(enabled ? "BẬT" : "TẮT")")
+    }
+
+    func setAutoNextDelay(_ delay: Double) {
+        autoNextDelay = delay
+        UserDefaults.standard.set(delay, forKey: "quiz_auto_next_delay")
+        print("⏱️ Auto next delay: \(delay)s")
+    }
+
+    func loadAutoNextSettings() {
+        autoNextQuestion = UserDefaults.standard.bool(forKey: "quiz_auto_next_enabled")
+        autoNextDelay = UserDefaults.standard.double(forKey: "quiz_auto_next_delay") > 0
+            ? UserDefaults.standard.double(forKey: "quiz_auto_next_delay")
+            : 1.5
+    }
+    
+    // MARK: - Timer Methods
+    func startQuestionTimer() {
+        // Reset timer với thời gian theo độ khó
+        timeRemaining = quizDifficulty.timeLimit
+        
+        // Hủy timer cũ nếu có
+        questionTimer?.invalidate()
+        
+        // Tạo timer mới
+        questionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                
+                if self.timeRemaining > 0 {
+                    self.timeRemaining -= 1
+                } else {
+                    // Hết thời gian - tự động chuyển câu
+                    self.handleTimeOut()
+                }
+            }
+        }
+    }
+
+    func stopQuestionTimer() {
+        questionTimer?.invalidate()
+        questionTimer = nil
+    }
+
+    private func handleTimeOut() {
+        stopQuestionTimer()
+        
+        // Tự động chọn câu trả lời sai (chọn đáp án đầu tiên nếu chưa chọn)
+        if selectedAnswer == nil, let firstOption = currentQuestion?.options.first {
+            selectedAnswer = firstOption
+        }
+        
+        showAnswer = true
+        incorrectAnswers += 1
+        totalAnswered += 1  // ✅ FIXED: Đã thêm property totalAnswered
+        
+        // Lưu user answer
+        if let question = currentQuestion {
+            let userAnswer = QuizUserAnswer(
+                questionId: question.id,
+                userAnswer: selectedAnswer ?? "",
+                correctAnswer: question.correctAnswer,
+                isCorrect: false, // Timeout = sai
+                timeSpent: Double(quizDifficulty.timeLimit) // Hết thời gian
+            )
+            userAnswers.append(userAnswer)
+        }
+    }
+
+    // MARK: - Answer Handling
+    func selectAnswer(_ answer: String) {
+        // Dừng timer khi user chọn đáp án
+        stopQuestionTimer()
+        
+        selectedAnswer = answer
+        showAnswer = true
+        
+        let questionTime = Date().timeIntervalSince(questionStartTime)
+        let isCorrect = answer == currentQuestion?.correctAnswer
+        
+        // Update statistics
+        if isCorrect {
+            correctAnswers += 1
+        } else {
+            incorrectAnswers += 1
+        }
+        
+        totalAnswered += 1
+        
+        // Record user answer
+        if let question = currentQuestion {
+            let userAnswer = QuizUserAnswer(
+                questionId: question.id,
+                userAnswer: answer,
+                correctAnswer: question.correctAnswer,
+                isCorrect: isCorrect,
+                timeSpent: questionTime
+            )
+            userAnswers.append(userAnswer)
+        }
+        
+        totalTime += questionTime
+        
+        print("📝 Answer selected: \(answer), Correct: \(isCorrect), Time: \(String(format: "%.1f", questionTime))s")
+        
+        // ✅ THÊM: Auto next logic
+        if autoNextQuestion {
+            startAutoNextTimer()
+        }
+    }
+
+    // MARK: - Auto Next Timer Methods (SỬA TÊN METHOD)
+    private func startAutoNextTimer() {
+        // Hủy timer cũ nếu có
+        autoNextTimer?.invalidate()
+        
+        // Tạo timer mới với delay
+        autoNextTimer = Timer.scheduledTimer(withTimeInterval: autoNextDelay, repeats: false) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.moveToNextQuestionAutomatically() // ✅ FIXED: Đổi tên method
+            }
+        }
+        
+        print("⏰ Auto next timer started: \(autoNextDelay)s")
+    }
+
+    private func stopAutoNextTimer() {
+        autoNextTimer?.invalidate()
+        autoNextTimer = nil
+    }
+
+    // ✅ FIXED: Đổi tên method để tránh conflict với property
+    private func moveToNextQuestionAutomatically() {
+        stopAutoNextTimer()
+        
+        if currentQuestionIndex + 1 >= quizQuestions.count {
+            completeQuiz()
+        } else {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                currentQuestionIndex += 1
+                selectedAnswer = nil
+                showAnswer = false
+                questionStartTime = Date()
+                
+                startQuestionTimer()
+            }
+        }
+        
+        print("🔄 Auto moved to next question")
+    }
+
+    func nextQuestion() {
+        stopQuestionTimer()
+        stopAutoNextTimer() // ✅ Dừng auto timer khi bấm manual
+        
+        if currentQuestionIndex + 1 >= quizQuestions.count {
+            completeQuiz()
+        } else {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                currentQuestionIndex += 1
+                selectedAnswer = nil
+                showAnswer = false
+                questionStartTime = Date()
+                
+                startQuestionTimer()
+            }
+        }
     }
     
     // MARK: - Category Management
@@ -240,10 +441,14 @@ class QuizViewModel: ObservableObject {
         correctAnswers = 0
         incorrectAnswers = 0
         totalTime = 0
+        totalAnswered = 0  // ✅ RESET totalAnswered
         userAnswers = []
         currentQuestionIndex = 0
         selectedAnswer = nil
         showAnswer = false
+        
+        // Bắt đầu timer cho câu đầu tiên
+        startQuestionTimer()
         
         // Create quiz session record
         quizSession = QuizSession(
@@ -261,53 +466,10 @@ class QuizViewModel: ObservableObject {
         print("🎯 Quiz session initialized with \(quizQuestions.count) questions")
     }
     
-    // MARK: - Answer Handling
-    func selectAnswer(_ answer: String) {
-        selectedAnswer = answer
-        showAnswer = true
-        
-        let questionTime = Date().timeIntervalSince(questionStartTime)
-        let isCorrect = answer == currentQuestion?.correctAnswer
-        
-        // Update statistics
-        if isCorrect {
-            correctAnswers += 1
-        } else {
-            incorrectAnswers += 1
-        }
-        
-        // Record user answer
-        if let question = currentQuestion {
-            let userAnswer = QuizUserAnswer(
-                questionId: question.id,
-                userAnswer: answer,
-                correctAnswer: question.correctAnswer,
-                isCorrect: isCorrect,
-                timeSpent: questionTime
-            )
-            userAnswers.append(userAnswer)
-        }
-        
-        totalTime += questionTime
-        
-        print("📝 Answer selected: \(answer), Correct: \(isCorrect), Time: \(String(format: "%.1f", questionTime))s")
-    }
-    
-    func nextQuestion() {
-        if currentQuestionIndex + 1 >= quizQuestions.count {
-            completeQuiz()
-        } else {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                currentQuestionIndex += 1
-                selectedAnswer = nil
-                showAnswer = false
-                questionStartTime = Date()
-            }
-        }
-    }
-    
     // MARK: - Quiz Completion
     private func completeQuiz() {
+        stopQuestionTimer() // ✅ THÊM: Dừng timer khi hoàn thành
+        
         let completionTime = Date()
         totalTime = completionTime.timeIntervalSince(sessionStartTime)
         
@@ -330,8 +492,8 @@ class QuizViewModel: ObservableObject {
     }
     
     private func saveQuizResults() async {
-        guard let session = quizSession,
-              let category = selectedCategory else { return }
+        guard let _ = quizSession,
+               let category = selectedCategory else { return }
         
         do {
             try await apiService.saveQuizResult(
@@ -368,6 +530,9 @@ class QuizViewModel: ObservableObject {
     
     // MARK: - Quiz Control
     func resetQuiz() {
+        stopQuestionTimer()
+        stopAutoNextTimer() // ✅ Dừng auto timer khi reset
+        
         withAnimation(.easeInOut(duration: 0.5)) {
             currentQuestionIndex = 0
             selectedAnswer = nil
@@ -375,11 +540,23 @@ class QuizViewModel: ObservableObject {
             showingQuizComplete = false
             correctAnswers = 0
             incorrectAnswers = 0
+            totalAnswered = 0
             totalTime = 0
             userAnswers = []
             questionStartTime = Date()
             sessionStartTime = Date()
+            
+            quizQuestions = []
+            timeRemaining = quizDifficulty.timeLimit
         }
+        
+        // ✅ Load auto next settings
+        loadAutoNextSettings()
+        
+        print("🔄 Quiz đã được reset với settings:")
+        print("   - Số câu: \(numberOfQuestions)")
+        print("   - Độ khó: \(quizDifficulty.rawValue) (\(quizDifficulty.timeLimit)s)")
+        print("   - Auto next: \(autoNextQuestion ? "BẬT" : "TẮT")")
     }
     
     func startNewQuiz() {
@@ -390,6 +567,7 @@ class QuizViewModel: ObservableObject {
     func restartCurrentQuiz() {
         resetQuiz()
         quizQuestions.shuffle() // Shuffle questions for variety
+        initializeQuizSession() // ✅ THÊM: Khởi tạo lại session để bắt đầu timer
     }
     
     // MARK: - Quiz Summary
@@ -407,6 +585,12 @@ class QuizViewModel: ObservableObject {
             level: selectedLevel?.displayName ?? "Unknown",
             userAnswers: userAnswers
         )
+    }
+    
+    // MARK: - Cleanup deinit
+    deinit {
+        questionTimer?.invalidate()
+        autoNextTimer?.invalidate()
     }
 }
 
@@ -512,6 +696,7 @@ struct QuizSummary {
         }
     }
 }
+
 extension APIService {
     
     // MARK: - Get Quiz Questions
