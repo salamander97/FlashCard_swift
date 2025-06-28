@@ -1,0 +1,579 @@
+# 🌸 Japanese Learning Website - Database Documentation
+
+## Tổng quan Database
+
+**Database Engine:** PostgreSQL  
+**Character Set:** UTF-8 (hỗ trợ tiếng Nhật)  
+**Database Name:** `japanese_learning`  
+**Connection:** Host: localhost, Port: 5432
+
+---
+
+## 📊 Kiến trúc Database
+
+### 1. **Core Tables** (Bảng chính)
+- `users` - Quản lý người dùng
+- `user_progress` - Tiến độ học tập tổng quát
+- `user_activities` - Lịch sử hoạt động học tập
+- `quiz_sessions` - Phiên làm bài quiz
+
+### 2. **Vocabulary System Tables** (Hệ thống từ vựng)
+- `vocabulary_categories` - Danh mục từ vựng (20 chủ đề)
+- `vocabulary_words` - Từ vựng chi tiết
+- `user_category_progress` - Tiến độ theo từng chủ đề
+- `user_word_knowledge` - Kiến thức từng từ (SRS Algorithm)
+
+### 3. **Achievement Tables** (Hệ thống thành tích)
+- `user_achievements` - Thành tích đạt được
+
+---
+
+## 🗃️ Chi tiết các bảng
+
+### 📋 Table: `users`
+**Mục đích:** Quản lý thông tin người dùng
+
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    display_name VARCHAR(100),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_login TIMESTAMP WITH TIME ZONE
+);
+```
+
+**Indexes:**
+- `users_username_idx` - Unique index trên username
+- `users_email_idx` - Unique index trên email
+
+**Sample Data:**
+```sql
+INSERT INTO users VALUES 
+(1, 'admin', 'admin@example.com', '$2y$10$...', 'Admin User', true, NOW(), NOW(), NOW()),
+(2, 'student1', 'student1@example.com', '$2y$10$...', 'Học sinh 1', true, NOW(), NOW(), NULL);
+```
+
+---
+
+### 📈 Table: `user_progress`
+**Mục đích:** Tracking tiến độ học tập tổng quát của user
+
+```sql
+CREATE TABLE user_progress (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    
+    -- Hiragana Progress
+    hiragana_score INTEGER DEFAULT 0,
+    hiragana_total INTEGER DEFAULT 0,
+    
+    -- Katakana Progress  
+    katakana_score INTEGER DEFAULT 0,
+    katakana_total INTEGER DEFAULT 0,
+    
+    -- Numbers Progress
+    numbers_score INTEGER DEFAULT 0,
+    numbers_total INTEGER DEFAULT 0,
+    
+    -- Legacy Vocabulary (sẽ deprecated)
+    vocabulary_n5_score INTEGER DEFAULT 0,
+    vocabulary_n5_total INTEGER DEFAULT 0,
+    vocabulary_n4_score INTEGER DEFAULT 0,
+    vocabulary_n4_total INTEGER DEFAULT 0,
+    vocabulary_n3_score INTEGER DEFAULT 0,
+    vocabulary_n3_total INTEGER DEFAULT 0,
+    
+    -- New Vocabulary System
+    vocabulary_categories_unlocked INTEGER DEFAULT 2,
+    vocabulary_words_learned INTEGER DEFAULT 0,
+    vocabulary_words_mastered INTEGER DEFAULT 0,
+    vocabulary_total_score INTEGER DEFAULT 0,
+    vocabulary_study_time INTEGER DEFAULT 0, -- seconds
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Constraints
+    CONSTRAINT chk_hiragana_score CHECK (
+        hiragana_score >= 0 AND 
+        (hiragana_total = 0 OR hiragana_score <= hiragana_total)
+    ),
+    CONSTRAINT chk_katakana_score CHECK (
+        katakana_score >= 0 AND 
+        (katakana_total = 0 OR katakana_score <= katakana_total)
+    ),
+    CONSTRAINT chk_numbers_score CHECK (
+        numbers_score >= 0 AND 
+        (numbers_total = 0 OR numbers_score <= numbers_total)
+    )
+);
+```
+
+**Triggers:**
+- `update_user_progress_updated_at` - Auto update timestamp
+
+**Sample Data:**
+```sql
+-- User có progress tốt
+INSERT INTO user_progress VALUES 
+(1, 1, 45, 50, 38, 50, 25, 30, 0, 0, 0, 0, 0, 0, 2, 92, 2, 0, 1932850, NOW(), NOW(), NOW());
+```
+
+---
+
+### 🎯 Table: `user_activities`
+**Mục đích:** Log tất cả hoạt động học tập để phân tích
+
+```sql
+CREATE TABLE user_activities (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    activity_type VARCHAR(50) NOT NULL, -- 'hiragana', 'katakana', 'numbers', 'vocabulary'
+    score INTEGER NOT NULL DEFAULT 0,
+    total_questions INTEGER NOT NULL DEFAULT 0,
+    time_spent INTEGER, -- seconds
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+**Indexes:**
+- `idx_user_activities_user_id` - Performance cho queries theo user
+- `idx_user_activities_created_at` - Performance cho queries theo thời gian
+
+---
+
+### 🧠 Table: `quiz_sessions`
+**Mục đích:** Track từng phiên làm bài quiz chi tiết
+
+```sql
+CREATE TABLE quiz_sessions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    quiz_type VARCHAR(50) NOT NULL, -- 'hiragana', 'katakana', 'numbers', 'vocabulary'
+    total_questions INTEGER NOT NULL,
+    correct_answers INTEGER NOT NULL DEFAULT 0,
+    time_spent INTEGER, -- seconds
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE,
+    is_completed BOOLEAN DEFAULT FALSE
+);
+```
+
+---
+
+## 📚 Vocabulary System (Hệ thống từ vựng nâng cao)
+
+### 🗂️ Table: `vocabulary_categories`
+**Mục đích:** 20 chủ đề từ vựng với unlock conditions
+
+```sql
+CREATE TABLE vocabulary_categories (
+    id SERIAL PRIMARY KEY,
+    category_name VARCHAR(100) NOT NULL,        -- "Gia đình"
+    category_name_en VARCHAR(100) NOT NULL,     -- "Family"
+    category_icon VARCHAR(10) DEFAULT '📚',     -- "👨‍👩‍👧‍👦"
+    category_color VARCHAR(7) DEFAULT '#667eea', -- CSS color
+    description TEXT,
+    difficulty_level INTEGER DEFAULT 1 CHECK (difficulty_level BETWEEN 1 AND 3),
+    estimated_hours DECIMAL(3,1) DEFAULT 2.0,
+    total_words INTEGER DEFAULT 0,
+    display_order INTEGER DEFAULT 0,
+    unlock_condition JSONB, -- {"required_categories": [1,2], "min_completion": 80}
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+**Sample Categories:**
+```sql
+INSERT INTO vocabulary_categories VALUES
+(1, 'Cơ bản', 'Basic', '🌱', '#56ab2f', 'Từ vựng cơ bản nhất', 1, 2.0, 25, 1, '{}', true, NOW()),
+(2, 'Số đếm', 'Numbers', '🔢', '#667eea', 'Các con số trong tiếng Nhật', 1, 1.5, 20, 2, '{}', true, NOW()),
+(3, 'Gia đình', 'Family', '👨‍👩‍👧‍👦', '#ff6b6b', 'Thành viên gia đình', 2, 3.0, 15, 3, '{"required_categories": [1], "min_completion": 80}', true, NOW());
+```
+
+---
+
+### 📖 Table: `vocabulary_words`
+**Mục đích:** Từ vựng chi tiết với ví dụ và metadata
+
+```sql
+CREATE TABLE vocabulary_words (
+    id SERIAL PRIMARY KEY,
+    category_id INTEGER REFERENCES vocabulary_categories(id) ON DELETE CASCADE,
+    japanese_word VARCHAR(100) NOT NULL,
+    kanji VARCHAR(100),
+    romaji VARCHAR(100) NOT NULL,
+    vietnamese_meaning TEXT NOT NULL,
+    word_type VARCHAR(50) DEFAULT 'noun', -- noun, verb, adjective, particle
+    example_sentence_jp TEXT,
+    example_sentence_vn TEXT,
+    usage_note TEXT,
+    frequency_rank INTEGER DEFAULT 3 CHECK (frequency_rank BETWEEN 1 AND 5),
+    audio_url VARCHAR(255),
+    image_url VARCHAR(255),
+    jlpt_level VARCHAR(5) DEFAULT 'N5',
+    display_order INTEGER DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    UNIQUE(category_id, japanese_word)
+);
+```
+
+**Sample Words:**
+```sql
+INSERT INTO vocabulary_words VALUES
+(1, 1, 'おはよう', NULL, 'ohayou', 'Chào buổi sáng', 'greeting', 
+ 'おはようございます。', 'Chào buổi sáng ạ.', 'Dùng vào buổi sáng', 1, NULL, NULL, 'N5', 1, true, NOW()),
+(2, 3, 'おかあさん', '母', 'okaasan', 'Mẹ', 'noun',
+ 'おかあさんは やさしいです。', 'Mẹ tôi rất hiền.', 'Cách gọi lịch sự', 1, NULL, NULL, 'N5', 1, true, NOW());
+```
+
+---
+
+### 📊 Table: `user_category_progress`
+**Mục đích:** Tiến độ user theo từng chủ đề
+
+```sql
+CREATE TABLE user_category_progress (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    category_id INTEGER REFERENCES vocabulary_categories(id) ON DELETE CASCADE,
+    total_words INTEGER DEFAULT 0,
+    learned_words INTEGER DEFAULT 0,    -- đã xem qua ít nhất 1 lần
+    mastered_words INTEGER DEFAULT 0,   -- đã trả lời đúng 3+ lần
+    quiz_best_score INTEGER DEFAULT 0,
+    quiz_attempts INTEGER DEFAULT 0,
+    total_study_time INTEGER DEFAULT 0, -- seconds
+    last_studied_at TIMESTAMP WITH TIME ZONE,
+    completion_percentage DECIMAL(5,2) DEFAULT 0.00,
+    is_completed BOOLEAN DEFAULT FALSE,
+    is_unlocked BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    UNIQUE(user_id, category_id)
+);
+```
+
+---
+
+### 🧠 Table: `user_word_knowledge` (SRS Algorithm)
+**Mục đích:** Spaced Repetition System cho từng từ
+
+```sql
+CREATE TABLE user_word_knowledge (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    word_id INTEGER REFERENCES vocabulary_words(id) ON DELETE CASCADE,
+    
+    -- SRS Algorithm Fields
+    knowledge_level INTEGER DEFAULT 0,     -- 0=new, 1-10=learning levels
+    ease_factor DECIMAL(3,2) DEFAULT 2.50, -- 1.30-4.00, how easy the word is
+    interval_days INTEGER DEFAULT 0,       -- days until next review
+    next_review_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Statistics
+    total_reviews INTEGER DEFAULT 0,
+    correct_reviews INTEGER DEFAULT 0,
+    incorrect_reviews INTEGER DEFAULT 0,
+    consecutive_correct INTEGER DEFAULT 0,
+    
+    -- Learning State
+    difficulty_level VARCHAR(20) DEFAULT 'new', -- 'new', 'learning', 'mature'
+    first_learned_at TIMESTAMP WITH TIME ZONE,
+    last_reviewed_at TIMESTAMP WITH TIME ZONE,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    UNIQUE(user_id, word_id)
+);
+```
+
+**SRS Algorithm Logic:**
+- **New words:** `knowledge_level = 0`, review ngay
+- **Learning:** `knowledge_level 1-6`, interval tăng dần (1, 3, 7, 14, 30, 60 days)
+- **Mature:** `knowledge_level 7+`, interval 120+ days
+- **Ease Factor:** Giảm khi trả lời sai, tăng khi liên tiếp đúng
+
+---
+
+### 🏆 Table: `user_achievements`
+**Mục đích:** Hệ thống thành tích và badges
+
+```sql
+CREATE TABLE user_achievements (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    achievement_type VARCHAR(50) NOT NULL, -- 'first_quiz', 'perfect_score', 'streak_7'
+    achievement_data JSONB, -- {"quiz_type": "hiragana", "score": 100}
+    earned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+**Achievement Types:**
+- `first_quiz` - Làm quiz đầu tiên
+- `perfect_score` - Đạt điểm tuyệt đối
+- `streak_7` - Học liên tiếp 7 ngày
+- `category_master` - Hoàn thành 1 chủ đề
+- `speed_demon` - Trả lời nhanh < 3s
+
+---
+
+## 🔧 Functions & Triggers
+
+### Function: `calculate_learning_streak()`
+```sql
+CREATE OR REPLACE FUNCTION calculate_learning_streak(p_user_id INTEGER) 
+RETURNS INTEGER AS $$
+DECLARE
+    streak INTEGER := 0;
+    current_date DATE := CURRENT_DATE;
+    activity_dates DATE[];
+    i INTEGER;
+BEGIN
+    -- Lấy danh sách các ngày có hoạt động
+    SELECT ARRAY_AGG(DISTINCT DATE(created_at) ORDER BY DATE(created_at) DESC)
+    INTO activity_dates
+    FROM user_activities
+    WHERE user_id = p_user_id;
+    
+    -- Kiểm tra streak từ ngày hiện tại
+    FOR i IN 1..COALESCE(array_length(activity_dates, 1), 0) LOOP
+        IF activity_dates[i] = current_date - INTERVAL '1 day' * (i - 1) THEN
+            streak := streak + 1;
+        ELSE
+            EXIT;
+        END IF;
+    END LOOP;
+    
+    RETURN streak;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Trigger: Auto Update Timestamps
+```sql
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Apply cho các bảng cần
+CREATE TRIGGER update_users_updated_at 
+    BEFORE UPDATE ON users 
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+```
+
+---
+
+## 📊 Indexes cho Performance
+
+```sql
+-- User Progress
+CREATE INDEX idx_user_progress_user_id ON user_progress(user_id);
+CREATE INDEX idx_user_progress_updated ON user_progress(last_updated);
+
+-- Activities
+CREATE INDEX idx_user_activities_user_id ON user_activities(user_id);
+CREATE INDEX idx_user_activities_type_date ON user_activities(activity_type, created_at);
+
+-- Vocabulary
+CREATE INDEX idx_vocabulary_words_category ON vocabulary_words(category_id);
+CREATE INDEX idx_user_word_knowledge_user_word ON user_word_knowledge(user_id, word_id);
+CREATE INDEX idx_user_word_knowledge_review_date ON user_word_knowledge(next_review_date);
+```
+
+---
+
+## 🔐 Security & Permissions
+
+### User Privileges
+```sql
+-- Tạo user cho app
+CREATE USER japanese_app WITH PASSWORD 'secure_password';
+
+-- Grant permissions
+GRANT CONNECT ON DATABASE japanese_learning TO japanese_app;
+GRANT USAGE ON SCHEMA public TO japanese_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO japanese_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO japanese_app;
+```
+
+### Password Security
+- Sử dụng `password_hash` với PHP `password_hash()`
+- Salt ngẫu nhiên cho mỗi password
+- Cost factor minimum 10
+
+---
+
+## 🚀 Query Examples
+
+### 1. Lấy tiến độ tổng quát của user
+```sql
+SELECT 
+    u.username,
+    u.display_name,
+    up.hiragana_score,
+    up.hiragana_total,
+    ROUND(up.hiragana_score::DECIMAL / NULLIF(up.hiragana_total, 0) * 100, 1) as hiragana_percentage,
+    up.vocabulary_words_learned,
+    up.vocabulary_words_mastered
+FROM users u
+JOIN user_progress up ON u.id = up.user_id
+WHERE u.id = $1;
+```
+
+### 2. Lấy từ cần ôn tập (SRS)
+```sql
+SELECT 
+    vw.id,
+    vw.japanese_word,
+    vw.kanji,
+    vw.vietnamese_meaning,
+    uwk.knowledge_level,
+    uwk.next_review_date
+FROM user_word_knowledge uwk
+JOIN vocabulary_words vw ON uwk.word_id = vw.id
+WHERE uwk.user_id = $1 
+    AND uwk.next_review_date <= NOW()
+    AND vw.is_active = true
+ORDER BY uwk.next_review_date ASC
+LIMIT 20;
+```
+
+### 3. Thống kê học tập theo tháng
+```sql
+SELECT 
+    DATE_TRUNC('month', created_at) as month,
+    activity_type,
+    COUNT(*) as total_sessions,
+    AVG(score::DECIMAL / NULLIF(total_questions, 0) * 100) as avg_percentage
+FROM user_activities
+WHERE user_id = $1 
+    AND created_at >= NOW() - INTERVAL '6 months'
+GROUP BY DATE_TRUNC('month', created_at), activity_type
+ORDER BY month DESC, activity_type;
+```
+
+---
+
+## 📈 Monitoring Queries
+
+### Database Health Check
+```sql
+-- Kiểm tra kết nối
+SELECT version();
+
+-- Kiểm tra size database
+SELECT 
+    pg_size_pretty(pg_database_size('japanese_learning')) as db_size;
+
+-- Top 5 bảng lớn nhất
+SELECT 
+    schemaname,
+    tablename,
+    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size
+FROM pg_tables 
+WHERE schemaname = 'public'
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC
+LIMIT 5;
+```
+
+### Performance Monitoring
+```sql
+-- Slow queries
+SELECT 
+    query,
+    calls,
+    total_time,
+    mean_time,
+    rows
+FROM pg_stat_statements 
+ORDER BY mean_time DESC 
+LIMIT 10;
+```
+
+---
+
+## 🔄 Backup & Migration
+
+### Daily Backup Script
+```bash
+#!/bin/bash
+DB_NAME="japanese_learning"
+BACKUP_DIR="/var/backups/postgresql"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+pg_dump $DB_NAME | gzip > $BACKUP_DIR/japanese_learning_$DATE.sql.gz
+
+# Xóa backup cũ hơn 30 ngày
+find $BACKUP_DIR -name "japanese_learning_*.sql.gz" -mtime +30 -delete
+```
+
+### Migration Scripts
+```sql
+-- Migration example: thêm field mới
+ALTER TABLE users ADD COLUMN timezone VARCHAR(50) DEFAULT 'Asia/Tokyo';
+
+-- Update existing data
+UPDATE users SET timezone = 'Asia/Tokyo' WHERE timezone IS NULL;
+```
+
+---
+
+## 📋 Data Maintenance
+
+### Weekly Cleanup Tasks
+```sql
+-- Xóa sessions chưa hoàn thành cũ hơn 24h
+DELETE FROM quiz_sessions 
+WHERE is_completed = false 
+    AND created_at < NOW() - INTERVAL '24 hours';
+
+-- Update completion percentages
+UPDATE user_category_progress 
+SET completion_percentage = (
+    learned_words::DECIMAL / NULLIF(total_words, 0) * 100
+);
+```
+
+### Data Validation
+```sql
+-- Kiểm tra data integrity
+SELECT COUNT(*) FROM user_progress WHERE hiragana_score > hiragana_total;
+SELECT COUNT(*) FROM user_word_knowledge WHERE knowledge_level < 0;
+```
+
+---
+
+## 🎯 Future Enhancements
+
+### Planned Tables
+1. `user_badges` - Hệ thống huy hiệu
+2. `leaderboards` - Bảng xếp hạng
+3. `study_groups` - Nhóm học tập
+4. `flashcard_decks` - Bộ thẻ flashcard tùy chỉnh
+5. `learning_paths` - Lộ trình học tập cá nhân hóa
+
+### Analytics Tables
+1. `daily_stats` - Thống kê theo ngày
+2. `user_behavior_logs` - Log hành vi chi tiết
+3. `performance_metrics` - Metrics hiệu suất
+
+---
+
+*📝 Document này được cập nhật lần cuối: June 14, 2025*  
+*🔧 Phiên bản Database: v2.1*  
+*👨‍💻 Tác giả: TrungHieu - Japanese Learning Team*
