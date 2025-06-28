@@ -8,12 +8,13 @@
 import Foundation
 import SwiftUI
 
-// ✅ GIỮ LẠI: enum QuizDifficulty ở đầu file
+// MARK: - 🎯 Enum Độ Khó Quiz
 enum QuizDifficulty: String, CaseIterable {
     case easy = "Dễ"
     case medium = "Trung bình"
     case hard = "Khó"
 
+    /// Thời gian giới hạn cho mỗi câu hỏi (giây)
     var timeLimit: Int {
         switch self {
         case .easy: return 20
@@ -21,101 +22,125 @@ enum QuizDifficulty: String, CaseIterable {
         case .hard: return 10
         }
     }
+    
+    /// Mô tả chi tiết độ khó
+    var description: String {
+        return "\(timeLimit) giây/câu"
+    }
 }
 
+// MARK: - 🎮 QuizViewModel - Quản lý logic quiz
 @MainActor
 class QuizViewModel: ObservableObject {
-    // MARK: - Published Properties
-    @Published var quizQuestions: [QuizQuestion] = []
-    @Published var currentQuestionIndex = 0
-    @Published var selectedAnswer: String? = nil
-    @Published var showAnswer = false
-    @Published var isLoading = false
-    @Published var errorMessage = ""
+    
+    // MARK: - 📊 Published Properties - UI State
+    @Published var quizQuestions: [QuizQuestion] = []          // Danh sách câu hỏi
+    @Published var currentQuestionIndex = 0                    // Câu hỏi hiện tại
+    @Published var selectedAnswer: String? = nil               // Đáp án được chọn
+    @Published var showAnswer = false                          // Hiển thị kết quả
+    @Published var isLoading = false                           // Trạng thái loading
+    @Published var errorMessage = ""                           // Thông báo lỗi
+    
+    // MARK: - 🎪 Quiz Session State
     @Published var quizSession: QuizSession? = nil
-    @Published var showingQuizComplete = false
-    @Published var showingCategorySelection = true
-    @Published var selectedCategory: Category? = nil
-    @Published var selectedLevel: JLPTLevel? = nil
-    @Published var categories: [Category] = []
-    @Published var quizMode: QuizMode = .multiple_choice
-    @Published var numberOfQuestions = 10
-    @Published var quizDifficulty: QuizDifficulty = .easy
-    @Published var timeRemaining: Int = 20
-    @Published var showTimer: Bool = true
-    @Published var autoNextQuestion: Bool = false
-    @Published var autoNextDelay: Double = 1.5
+    @Published var showingQuizComplete = false                 // Hiển thị màn hình hoàn thành
+    @Published var showingCategorySelection = true             // Hiển thị chọn chủ đề
     
-    private var questionTimer: Timer?
-    private var autoNextTimer: Timer?
+    // MARK: - ⚙️ Quiz Settings
+    @Published var selectedCategory: Category? = nil          // Chủ đề được chọn
+    @Published var selectedLevel: JLPTLevel? = nil            // Level JLPT được chọn
+    @Published var categories: [Category] = []                // Danh sách chủ đề
+    @Published var quizMode: QuizMode = .multiple_choice      // Chế độ quiz
+    @Published var numberOfQuestions = 10                     // Số câu hỏi
+    @Published var quizDifficulty: QuizDifficulty = .easy     // Độ khó
     
-    // Quiz Statistics
-    @Published var correctAnswers = 0
-    @Published var incorrectAnswers = 0
-    @Published var totalTime: TimeInterval = 0
-    @Published var questionStartTime = Date()
-    @Published var userAnswers: [QuizUserAnswer] = []
+    // MARK: - ⏰ Timer Settings
+    @Published var timeRemaining: Int = 20                    // Thời gian còn lại
+    @Published var showTimer: Bool = true                     // Hiển thị timer
+    @Published var autoNextQuestion: Bool = false             // Tự động chuyển câu
+    @Published var autoNextDelay: Double = 1.5                // Delay trước khi chuyển câu
     
-    // ✅ THÊM: property totalAnswered bị thiếu
-    @Published var totalAnswered = 0
+    // MARK: - 📈 Statistics
+    @Published var correctAnswers = 0                         // Số câu đúng
+    @Published var incorrectAnswers = 0                       // Số câu sai
+    @Published var totalAnswered = 0                          // Tổng số câu đã trả lời
+    @Published var totalTime: TimeInterval = 0               // Tổng thời gian
+    @Published var questionStartTime = Date()                 // Thời gian bắt đầu câu hỏi
+    @Published var userAnswers: [QuizUserAnswer] = []         // Lịch sử trả lời
     
-    private let apiService = APIService.shared
-    private var sessionStartTime = Date()
+    // MARK: - 🔧 Private Properties
+    private var questionTimer: Timer?                         // Timer cho câu hỏi
+    private var autoNextTimer: Timer?                         // Timer tự động chuyển câu
+    private let apiService = APIService.shared               // Service gọi API
+    private var sessionStartTime = Date()                    // Thời gian bắt đầu session
     
-    // MARK: - Computed Properties
+    // MARK: - 🧮 Computed Properties
+    
+    /// Câu hỏi hiện tại
     var currentQuestion: QuizQuestion? {
         guard currentQuestionIndex < quizQuestions.count else { return nil }
         return quizQuestions[currentQuestionIndex]
     }
     
+    /// Phần trăm tiến độ
     var progressPercentage: Double {
         guard !quizQuestions.isEmpty else { return 0 }
         return Double(currentQuestionIndex) / Double(quizQuestions.count) * 100
     }
     
+    /// Kiểm tra quiz đã hoàn thành chưa
     var isQuizComplete: Bool {
         return currentQuestionIndex >= quizQuestions.count
     }
     
+    /// Độ chính xác (%)
     var accuracy: Double {
         let total = correctAnswers + incorrectAnswers
         guard total > 0 else { return 0 }
         return Double(correctAnswers) / Double(total) * 100
     }
     
-    // MARK: - Initialization
+    // MARK: - 🏗️ Initialization
     init() {
         loadCategories()
         loadAutoNextSettings()
     }
     
-    // MARK: - Auto Next Settings
+    // MARK: - ⚙️ Auto Next Settings Management
+    
+    /// Bật/tắt tự động chuyển câu
     func setAutoNext(_ enabled: Bool) {
         autoNextQuestion = enabled
         UserDefaults.standard.set(enabled, forKey: "quiz_auto_next_enabled")
         print("🔄 Auto next câu hỏi: \(enabled ? "BẬT" : "TẮT")")
     }
 
+    /// Thiết lập thời gian delay cho auto next
     func setAutoNextDelay(_ delay: Double) {
         autoNextDelay = delay
         UserDefaults.standard.set(delay, forKey: "quiz_auto_next_delay")
         print("⏱️ Auto next delay: \(delay)s")
     }
 
-    func loadAutoNextSettings() {
+    /// Load settings auto next từ UserDefaults
+    private func loadAutoNextSettings() {
         autoNextQuestion = UserDefaults.standard.bool(forKey: "quiz_auto_next_enabled")
         autoNextDelay = UserDefaults.standard.double(forKey: "quiz_auto_next_delay") > 0
             ? UserDefaults.standard.double(forKey: "quiz_auto_next_delay")
             : 1.5
     }
     
-    // MARK: - Timer Methods
+    // MARK: - ⏰ Timer Management
+    
+    /// Bắt đầu timer cho câu hỏi
     func startQuestionTimer() {
+        guard showTimer else { return }
+        
         // Reset timer với thời gian theo độ khó
         timeRemaining = quizDifficulty.timeLimit
         
         // Hủy timer cũ nếu có
-        questionTimer?.invalidate()
+        stopQuestionTimer()
         
         // Tạo timer mới
         questionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -132,11 +157,13 @@ class QuizViewModel: ObservableObject {
         }
     }
 
+    /// Dừng timer câu hỏi
     func stopQuestionTimer() {
         questionTimer?.invalidate()
         questionTimer = nil
     }
 
+    /// Xử lý khi hết thời gian
     private func handleTimeOut() {
         stopQuestionTimer()
         
@@ -147,7 +174,7 @@ class QuizViewModel: ObservableObject {
         
         showAnswer = true
         incorrectAnswers += 1
-        totalAnswered += 1  // ✅ FIXED: Đã thêm property totalAnswered
+        totalAnswered += 1
         
         // Lưu user answer
         if let question = currentQuestion {
@@ -160,9 +187,16 @@ class QuizViewModel: ObservableObject {
             )
             userAnswers.append(userAnswer)
         }
+        
+        // Auto next nếu được bật
+        if autoNextQuestion {
+            startAutoNextTimer()
+        }
     }
 
-    // MARK: - Answer Handling
+    // MARK: - 🎯 Answer Handling
+    
+    /// Xử lý khi user chọn đáp án
     func selectAnswer(_ answer: String) {
         // Dừng timer khi user chọn đáp án
         stopQuestionTimer()
@@ -173,7 +207,7 @@ class QuizViewModel: ObservableObject {
         let questionTime = Date().timeIntervalSince(questionStartTime)
         let isCorrect = answer == currentQuestion?.correctAnswer
         
-        // Update statistics
+        // Cập nhật thống kê
         if isCorrect {
             correctAnswers += 1
         } else {
@@ -182,7 +216,7 @@ class QuizViewModel: ObservableObject {
         
         totalAnswered += 1
         
-        // Record user answer
+        // Ghi lại câu trả lời
         if let question = currentQuestion {
             let userAnswer = QuizUserAnswer(
                 questionId: question.id,
@@ -198,34 +232,37 @@ class QuizViewModel: ObservableObject {
         
         print("📝 Answer selected: \(answer), Correct: \(isCorrect), Time: \(String(format: "%.1f", questionTime))s")
         
-        // ✅ THÊM: Auto next logic
+        // Auto next logic
         if autoNextQuestion {
             startAutoNextTimer()
         }
     }
 
-    // MARK: - Auto Next Timer Methods (SỬA TÊN METHOD)
+    // MARK: - 🔄 Auto Next Timer Management
+    
+    /// Bắt đầu timer tự động chuyển câu
     private func startAutoNextTimer() {
         // Hủy timer cũ nếu có
-        autoNextTimer?.invalidate()
+        stopAutoNextTimer()
         
         // Tạo timer mới với delay
         autoNextTimer = Timer.scheduledTimer(withTimeInterval: autoNextDelay, repeats: false) { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                self.moveToNextQuestionAutomatically() // ✅ FIXED: Đổi tên method
+                self.moveToNextQuestionAutomatically()
             }
         }
         
         print("⏰ Auto next timer started: \(autoNextDelay)s")
     }
 
+    /// Dừng timer tự động chuyển câu
     private func stopAutoNextTimer() {
         autoNextTimer?.invalidate()
         autoNextTimer = nil
     }
 
-    // ✅ FIXED: Đổi tên method để tránh conflict với property
+    /// Di chuyển đến câu tiếp theo tự động
     private func moveToNextQuestionAutomatically() {
         stopAutoNextTimer()
         
@@ -245,9 +282,10 @@ class QuizViewModel: ObservableObject {
         print("🔄 Auto moved to next question")
     }
 
+    /// Chuyển câu tiếp theo thủ công
     func nextQuestion() {
         stopQuestionTimer()
-        stopAutoNextTimer() // ✅ Dừng auto timer khi bấm manual
+        stopAutoNextTimer() // Dừng auto timer khi bấm manual
         
         if currentQuestionIndex + 1 >= quizQuestions.count {
             completeQuiz()
@@ -263,7 +301,9 @@ class QuizViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Category Management
+    // MARK: - 📂 Category Management
+    
+    /// Load danh sách categories từ API
     func loadCategories() {
         Task {
             do {
@@ -271,12 +311,13 @@ class QuizViewModel: ObservableObject {
                 print("✅ Loaded \(categories.count) categories for quiz")
             } catch {
                 print("❌ Error loading categories: \(error)")
-                // Load sample categories if API fails
+                // Load sample categories nếu API fail
                 loadSampleCategories()
             }
         }
     }
     
+    /// Load sample categories cho testing
     private func loadSampleCategories() {
         categories = [
             Category(
@@ -296,6 +337,7 @@ class QuizViewModel: ObservableObject {
         ]
     }
     
+    /// Chọn category và level để bắt đầu quiz
     func selectCategoryAndLevel(category: Category, level: JLPTLevel) {
         selectedCategory = category
         selectedLevel = level
@@ -306,9 +348,14 @@ class QuizViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Quiz Data Loading
+    // MARK: - 📚 Quiz Data Loading
+    
+    /// Load câu hỏi quiz từ API hoặc generate từ vocabulary
     func loadQuizQuestions() async {
-        guard let category = selectedCategory else { return }
+        guard let category = selectedCategory else {
+            print("❌ Không có category được chọn")
+            return
+        }
         
         isLoading = true
         errorMessage = ""
@@ -316,7 +363,7 @@ class QuizViewModel: ObservableObject {
         do {
             print("🔄 Loading quiz questions for category: \(category.name)")
             
-            // Try to get quiz questions from API
+            // Thử lấy câu hỏi từ API trước
             let questions = try await apiService.getQuizQuestions(
                 categoryId: category.id,
                 questionCount: numberOfQuestions,
@@ -324,55 +371,66 @@ class QuizViewModel: ObservableObject {
             )
             
             if questions.isEmpty {
-                print("⚠️ No questions from API, generating from vocabulary")
+                print("⚠️ Không có câu hỏi từ API, generating từ vocabulary")
                 await generateQuestionsFromVocabulary(categoryId: category.id)
             } else {
                 quizQuestions = questions
-                print("✅ Loaded \(questions.count) quiz questions")
+                print("✅ Loaded \(questions.count) quiz questions từ API")
             }
             
-            // Initialize quiz session
+            // Khởi tạo quiz session
             initializeQuizSession()
             
         } catch {
             print("❌ Error loading quiz questions: \(error)")
-            // Fallback to sample questions or generate from vocabulary
+            // Fallback sang generate từ vocabulary
             await generateQuestionsFromVocabulary(categoryId: category.id)
         }
         
         isLoading = false
     }
     
+    /// Generate câu hỏi từ vocabulary words
     private func generateQuestionsFromVocabulary(categoryId: Int) async {
         do {
             let words = try await apiService.getStudyWords(categoryId: categoryId)
-            print("📚 Generating quiz from \(words.count) vocabulary words")
+            print("📚 Generating quiz từ \(words.count) vocabulary words")
             
             if words.isEmpty {
+                print("⚠️ Không có words, dùng sample questions")
                 generateSampleQuestions()
             } else {
                 quizQuestions = generateMultipleChoiceQuestions(from: words)
+                print("✅ Generated \(quizQuestions.count) quiz questions")
             }
             
         } catch {
-            print("❌ Failed to get vocabulary words, using sample questions")
+            print("❌ Failed to get vocabulary words, dùng sample questions")
             generateSampleQuestions()
         }
     }
     
+    /// Generate multiple choice questions từ danh sách words
     private func generateMultipleChoiceQuestions(from words: [Word]) -> [QuizQuestion] {
+        guard !words.isEmpty else {
+            print("❌ Không thể generate questions: words array rỗng")
+            return []
+        }
+        
         let shuffledWords = words.shuffled()
         let questionCount = min(numberOfQuestions, words.count)
         var questions: [QuizQuestion] = []
         
+        print("📊 Sẽ tạo \(questionCount) câu hỏi từ \(words.count) từ có sẵn")
+        
         for i in 0..<questionCount {
             let correctWord = shuffledWords[i]
             
-            // Generate wrong answers from other words
+            // Tạo các đáp án sai từ những từ khác
             let otherWords = shuffledWords.filter { $0.id != correctWord.id }
             let wrongAnswers = Array(otherWords.shuffled().prefix(3))
             
-            // Create multiple choice options
+            // Tạo danh sách options
             var options = wrongAnswers.map { $0.vietnameseMeaning }
             options.append(correctWord.vietnameseMeaning)
             options.shuffle()
@@ -395,6 +453,7 @@ class QuizViewModel: ObservableObject {
         return questions
     }
     
+    /// Generate sample questions cho testing
     private func generateSampleQuestions() {
         print("🧪 Generating sample quiz questions")
         quizQuestions = [
@@ -434,14 +493,18 @@ class QuizViewModel: ObservableObject {
         ]
     }
     
-    // MARK: - Quiz Session Management
+    // MARK: - 🎮 Quiz Session Management
+    
+    /// Khởi tạo quiz session mới
     private func initializeQuizSession() {
         sessionStartTime = Date()
         questionStartTime = Date()
+        
+        // Reset tất cả statistics
         correctAnswers = 0
         incorrectAnswers = 0
         totalTime = 0
-        totalAnswered = 0  // ✅ RESET totalAnswered
+        totalAnswered = 0
         userAnswers = []
         currentQuestionIndex = 0
         selectedAnswer = nil
@@ -450,7 +513,7 @@ class QuizViewModel: ObservableObject {
         // Bắt đầu timer cho câu đầu tiên
         startQuestionTimer()
         
-        // Create quiz session record
+        // Tạo quiz session record
         quizSession = QuizSession(
             id: Int.random(in: 1000...9999),
             userId: UserDefaults.standard.integer(forKey: Constants.Storage.userId),
@@ -463,17 +526,21 @@ class QuizViewModel: ObservableObject {
             isCompleted: false
         )
         
-        print("🎯 Quiz session initialized with \(quizQuestions.count) questions")
+        print("🎯 Quiz session initialized với \(quizQuestions.count) questions")
     }
     
-    // MARK: - Quiz Completion
+    // MARK: - 🏁 Quiz Completion
+    
+    /// Hoàn thành quiz
     private func completeQuiz() {
-        stopQuestionTimer() // ✅ THÊM: Dừng timer khi hoàn thành
+        // Dừng tất cả timers
+        stopQuestionTimer()
+        stopAutoNextTimer()
         
         let completionTime = Date()
         totalTime = completionTime.timeIntervalSince(sessionStartTime)
         
-        // Update quiz session
+        // Cập nhật quiz session
         quizSession?.correctAnswers = correctAnswers
         quizSession?.timeSpent = Int(totalTime)
         quizSession?.completedAt = completionTime
@@ -483,7 +550,7 @@ class QuizViewModel: ObservableObject {
             showingQuizComplete = true
         }
         
-        // Save quiz results to API
+        // Lưu kết quả lên server
         Task {
             await saveQuizResults()
         }
@@ -491,6 +558,7 @@ class QuizViewModel: ObservableObject {
         print("🎉 Quiz completed! Score: \(correctAnswers)/\(quizQuestions.count) (\(String(format: "%.1f", accuracy))%)")
     }
     
+    /// Lưu kết quả quiz lên server
     private func saveQuizResults() async {
         guard let _ = quizSession,
                let category = selectedCategory else { return }
@@ -506,11 +574,12 @@ class QuizViewModel: ObservableObject {
             print("✅ Quiz results saved to server")
         } catch {
             print("⚠️ Failed to save quiz results: \(error)")
-            // Save locally as backup
+            // Backup: lưu local
             saveQuizResultsLocally()
         }
     }
     
+    /// Backup: lưu kết quả quiz locally
     private func saveQuizResultsLocally() {
         let quizResult = [
             "category_id": selectedCategory?.id ?? 0,
@@ -528,10 +597,13 @@ class QuizViewModel: ObservableObject {
         print("💾 Quiz results saved locally")
     }
     
-    // MARK: - Quiz Control
+    // MARK: - 🔄 Quiz Control
+    
+    /// Reset quiz về trạng thái ban đầu
     func resetQuiz() {
+        // Dừng tất cả timers
         stopQuestionTimer()
-        stopAutoNextTimer() // ✅ Dừng auto timer khi reset
+        stopAutoNextTimer()
         
         withAnimation(.easeInOut(duration: 0.5)) {
             currentQuestionIndex = 0
@@ -550,7 +622,7 @@ class QuizViewModel: ObservableObject {
             timeRemaining = quizDifficulty.timeLimit
         }
         
-        // ✅ Load auto next settings
+        // Load lại auto next settings
         loadAutoNextSettings()
         
         print("🔄 Quiz đã được reset với settings:")
@@ -559,18 +631,22 @@ class QuizViewModel: ObservableObject {
         print("   - Auto next: \(autoNextQuestion ? "BẬT" : "TẮT")")
     }
     
+    /// Bắt đầu quiz mới
     func startNewQuiz() {
         showingCategorySelection = true
         resetQuiz()
     }
     
+    /// Làm lại quiz hiện tại
     func restartCurrentQuiz() {
         resetQuiz()
-        quizQuestions.shuffle() // Shuffle questions for variety
-        initializeQuizSession() // ✅ THÊM: Khởi tạo lại session để bắt đầu timer
+        quizQuestions.shuffle() // Trộn câu hỏi cho đa dạng
+        initializeQuizSession() // Khởi tạo lại session
     }
     
-    // MARK: - Quiz Summary
+    // MARK: - 📊 Quiz Summary
+    
+    /// Lấy tóm tắt kết quả quiz
     func getQuizSummary() -> QuizSummary {
         let averageTimePerQuestion = userAnswers.isEmpty ? 0 : userAnswers.map { $0.timeSpent }.reduce(0, +) / Double(userAnswers.count)
         
@@ -587,26 +663,30 @@ class QuizViewModel: ObservableObject {
         )
     }
     
-    // MARK: - Cleanup deinit
+    // MARK: - 🧹 Cleanup
     deinit {
         questionTimer?.invalidate()
         autoNextTimer?.invalidate()
+        print("🧹 QuizViewModel cleaned up")
     }
 }
 
-// MARK: - Supporting Models
+// MARK: - 📋 Supporting Models
+
+/// Model cho câu hỏi quiz (dùng trong app)
 struct QuizQuestion: Codable, Identifiable {
     let id: Int
-    let questionText: String
-    let questionType: QuizQuestionType
-    let options: [String]
-    let correctAnswer: String
-    let explanation: String?
-    let wordId: Int?
-    let romaji: String?
-    let kanji: String?
+    let questionText: String                    // Văn bản câu hỏi (tiếng Nhật)
+    let questionType: QuizQuestionType          // Loại câu hỏi
+    let options: [String]                       // Các lựa chọn
+    let correctAnswer: String                   // Đáp án đúng
+    let explanation: String?                    // Giải thích (optional)
+    let wordId: Int?                           // ID của từ vựng (optional)
+    let romaji: String?                        // Phiên âm romaji (optional)
+    let kanji: String?                         // Chữ kanji (optional)
 }
 
+/// Enum loại câu hỏi
 enum QuizQuestionType: String, Codable, CaseIterable {
     case multiple_choice = "multiple_choice"
     case true_false = "true_false"
@@ -623,6 +703,7 @@ enum QuizQuestionType: String, Codable, CaseIterable {
     }
 }
 
+/// Enum chế độ quiz
 enum QuizMode: String, CaseIterable {
     case multiple_choice = "multiple_choice"
     case mixed = "mixed"
@@ -645,6 +726,7 @@ enum QuizMode: String, CaseIterable {
     }
 }
 
+/// Model cho quiz session
 struct QuizSession: Codable {
     let id: Int
     let userId: Int
@@ -657,6 +739,7 @@ struct QuizSession: Codable {
     var isCompleted: Bool
 }
 
+/// Model cho câu trả lời của user
 struct QuizUserAnswer: Codable {
     let questionId: Int
     let userAnswer: String
@@ -665,6 +748,7 @@ struct QuizUserAnswer: Codable {
     let timeSpent: TimeInterval
 }
 
+/// Model tóm tắt kết quả quiz
 struct QuizSummary {
     let totalQuestions: Int
     let correctAnswers: Int
@@ -676,6 +760,7 @@ struct QuizSummary {
     let level: String
     let userAnswers: [QuizUserAnswer]
     
+    /// Đánh giá kết quả
     var grade: String {
         switch accuracy {
         case 90...100: return "Xuất sắc! 🌟"
@@ -686,6 +771,7 @@ struct QuizSummary {
         }
     }
     
+    /// Màu sắc theo kết quả
     var scoreColor: Color {
         switch accuracy {
         case 90...100: return .green
@@ -697,9 +783,11 @@ struct QuizSummary {
     }
 }
 
+// MARK: - 🌐 APIService Extensions cho Quiz
+
 extension APIService {
     
-    // MARK: - Get Quiz Questions
+    /// Lấy câu hỏi quiz từ API
     func getQuizQuestions(
         categoryId: Int,
         questionCount: Int = 10,
@@ -709,6 +797,7 @@ extension APIService {
             throw APIError.unauthorized
         }
         
+        // Tạo URL với parameters
         var urlComponents = URLComponents(string: Constants.API.baseURL + Constants.API.Endpoints.vocabulary)!
         urlComponents.queryItems = [
             URLQueryItem(name: "action", value: "get_quiz_questions"),
@@ -717,7 +806,7 @@ extension APIService {
             URLQueryItem(name: "quiz_mode", value: quizMode.rawValue)
         ]
         
-        // Add user_id
+        // Thêm user_id
         if let userId = UserDefaults.standard.object(forKey: Constants.Storage.userId) as? Int {
             urlComponents.queryItems?.append(URLQueryItem(name: "user_id", value: "\(userId)"))
         }
@@ -730,7 +819,7 @@ extension APIService {
         request.httpMethod = "GET"
         request.timeoutInterval = Constants.API.timeout
         
-        // Add auth header
+        // Thêm auth header nếu có
         if let token = UserDefaults.standard.string(forKey: Constants.Storage.userToken), !token.isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -743,7 +832,7 @@ extension APIService {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             print("📥 Quiz Questions HTTP Status: \(statusCode)")
             
-            // Log response for debugging
+            // Log response để debug
             if let responseString = String(data: data, encoding: .utf8) {
                 print("📄 Quiz Questions Response: \(responseString.prefix(500))...")
             }
@@ -757,13 +846,15 @@ extension APIService {
                 let questionsResponse = try JSONDecoder().decode(QuizQuestionsResponse.self, from: data)
                 
                 if questionsResponse.success {
-                    let questions = questionsResponse.data ?? []
-                    print("✅ Loaded \(questions.count) quiz questions")
+                    // Convert QuizQuestionFromAPI sang QuizQuestion
+                    let apiQuestions = questionsResponse.data?.questions ?? []
+                    let questions = apiQuestions.map { $0.toQuizQuestion() }
+                    print("✅ Loaded \(questions.count) quiz questions từ API")
                     return questions
                 } else {
                     let message = questionsResponse.message ?? "Unknown error"
                     print("❌ Quiz Questions API failed: \(message)")
-                    return [] // Return empty array instead of throwing
+                    return [] // Trả về array rỗng thay vì throw
                 }
                 
             case 401:
@@ -771,8 +862,8 @@ extension APIService {
                 throw APIError.unauthorized
                 
             case 404:
-                print("ℹ️ No quiz questions found for category \(categoryId)")
-                return [] // Return empty array for 404
+                print("ℹ️ Không tìm thấy quiz questions cho category \(categoryId)")
+                return [] // Trả về array rỗng cho 404
                 
             default:
                 throw APIError.serverError
@@ -782,11 +873,11 @@ extension APIService {
             throw error
         } catch {
             print("🚨 Network error getting quiz questions: \(error)")
-            return [] // Return empty array instead of throwing for network errors
+            return [] // Trả về array rỗng thay vì throw cho network errors
         }
     }
     
-    // MARK: - Save Quiz Result
+    /// Lưu kết quả quiz lên server
     func saveQuizResult(
         categoryId: Int,
         totalQuestions: Int,
@@ -805,7 +896,7 @@ extension APIService {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = Constants.API.timeout
         
-        // Add auth header
+        // Thêm auth header
         if let token = UserDefaults.standard.string(forKey: Constants.Storage.userToken), !token.isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -819,7 +910,7 @@ extension APIService {
             "accuracy=\(accuracy)"
         ]
         
-        // Add user_id if available
+        // Thêm user_id nếu có
         if let userId = UserDefaults.standard.object(forKey: Constants.Storage.userId) as? Int {
             parameters.append("user_id=\(userId)")
         }
@@ -850,7 +941,7 @@ extension APIService {
                 if saveResponse.success {
                     print("✅ Quiz result saved successfully")
                     
-                    // Update local best score if this is better
+                    // Cập nhật best score local nếu tốt hơn
                     updateLocalBestScore(categoryId: categoryId, newScore: Int(accuracy))
                     
                 } else {
@@ -875,7 +966,7 @@ extension APIService {
         }
     }
     
-    // MARK: - Get Quiz History
+    /// Lấy lịch sử quiz
     func getQuizHistory(categoryId: Int? = nil, limit: Int = 20) async throws -> [QuizHistoryItem] {
         guard UserDefaults.standard.bool(forKey: Constants.Storage.isLoggedIn) else {
             throw APIError.unauthorized
@@ -887,12 +978,12 @@ extension APIService {
             URLQueryItem(name: "limit", value: "\(limit)")
         ]
         
-        // Add category filter if specified
+        // Thêm filter category nếu có
         if let categoryId = categoryId {
             urlComponents.queryItems?.append(URLQueryItem(name: "category_id", value: "\(categoryId)"))
         }
         
-        // Add user_id
+        // Thêm user_id
         if let userId = UserDefaults.standard.object(forKey: Constants.Storage.userId) as? Int {
             urlComponents.queryItems?.append(URLQueryItem(name: "user_id", value: "\(userId)"))
         }
@@ -905,7 +996,7 @@ extension APIService {
         request.httpMethod = "GET"
         request.timeoutInterval = Constants.API.timeout
         
-        // Add auth header
+        // Thêm auth header
         if let token = UserDefaults.standard.string(forKey: Constants.Storage.userToken), !token.isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -941,7 +1032,7 @@ extension APIService {
                 throw APIError.unauthorized
                 
             case 404:
-                print("ℹ️ No quiz history found")
+                print("ℹ️ Không tìm thấy quiz history")
                 return []
                 
             default:
@@ -956,7 +1047,7 @@ extension APIService {
         }
     }
     
-    // MARK: - Get Quiz Statistics
+    /// Lấy thống kê quiz
     func getQuizStatistics() async throws -> QuizStatistics {
         guard UserDefaults.standard.bool(forKey: Constants.Storage.isLoggedIn) else {
             throw APIError.unauthorized
@@ -967,7 +1058,7 @@ extension APIService {
             URLQueryItem(name: "action", value: "get_quiz_statistics")
         ]
         
-        // Add user_id
+        // Thêm user_id
         if let userId = UserDefaults.standard.object(forKey: Constants.Storage.userId) as? Int {
             urlComponents.queryItems?.append(URLQueryItem(name: "user_id", value: "\(userId)"))
         }
@@ -980,7 +1071,7 @@ extension APIService {
         request.httpMethod = "GET"
         request.timeoutInterval = Constants.API.timeout
         
-        // Add auth header
+        // Thêm auth header
         if let token = UserDefaults.standard.string(forKey: Constants.Storage.userToken), !token.isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -1026,16 +1117,16 @@ extension APIService {
         }
     }
     
-    // MARK: - Helper Methods
+    /// Cập nhật best score local
     private func updateLocalBestScore(categoryId: Int, newScore: Int) {
         let key = "quiz_best_score_\(categoryId)"
         let currentBest = UserDefaults.standard.integer(forKey: key)
         
         if newScore > currentBest {
             UserDefaults.standard.set(newScore, forKey: key)
-            print("🏆 New best score for category \(categoryId): \(newScore)%")
+            print("🏆 New best score cho category \(categoryId): \(newScore)%")
             
-            // Post notification for achievement
+            // Post notification cho achievement
             NotificationCenter.default.post(
                 name: NSNotification.Name("QuizNewBestScore"),
                 object: nil,
@@ -1045,19 +1136,86 @@ extension APIService {
     }
 }
 
-// MARK: - Quiz Response Models
+// MARK: - 📡 API Response Models
+
+/// Response cho quiz questions API
 struct QuizQuestionsResponse: Codable {
     let success: Bool
-    let data: [QuizQuestion]?
+    let data: QuizQuestionsData?
     let message: String?
 }
 
+/// Data wrapper chứa session_id và questions
+struct QuizQuestionsData: Codable {
+    let sessionId: Int
+    let questions: [QuizQuestionFromAPI]  // Questions từ API format
+    
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case questions
+    }
+}
+
+/// Model cho quiz question từ API (format khác với QuizQuestion)
+struct QuizQuestionFromAPI: Codable, Identifiable {
+    let id: Int
+    let type: String?                    // "meaning", "reading", etc.
+    let question: String                 // Japanese word
+    let questionKanji: String?           // Kanji version
+    let correctAnswer: String            // Vietnamese meaning
+    let questionType: String?            // "jp_to_vn", "vn_to_jp", etc.
+    let options: [String]
+    let wordData: QuizWordData?          // Additional word info
+    
+    enum CodingKeys: String, CodingKey {
+        case id, type, question, options
+        case questionKanji = "question_kanji"
+        case correctAnswer = "correct_answer"
+        case questionType = "question_type"
+        case wordData = "word_data"
+    }
+    
+    /// Convert sang QuizQuestion format để dùng trong app
+    func toQuizQuestion() -> QuizQuestion {
+        return QuizQuestion(
+            id: self.id,
+            questionText: self.question,
+            questionType: .multiple_choice,  // Default
+            options: self.options,
+            correctAnswer: self.correctAnswer,
+            explanation: self.wordData?.exampleVn,
+            wordId: nil,
+            romaji: self.wordData?.romaji,
+            kanji: self.questionKanji
+        )
+    }
+}
+
+/// Model cho word data trong API response
+struct QuizWordData: Codable {
+    let romaji: String?
+    let wordType: String?
+    let exampleJp: String?
+    let exampleVn: String?
+    let usageNote: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case romaji
+        case wordType = "word_type"
+        case exampleJp = "example_jp"
+        case exampleVn = "example_vn"
+        case usageNote = "usage_note"
+    }
+}
+
+/// Response cho save quiz result API
 struct SaveQuizResultResponse: Codable {
     let success: Bool
     let message: String?
     let data: QuizResultData?
 }
 
+/// Data cho quiz result
 struct QuizResultData: Codable {
     let quizId: Int
     let newBestScore: Bool
@@ -1070,12 +1228,14 @@ struct QuizResultData: Codable {
     }
 }
 
+/// Response cho quiz history API
 struct QuizHistoryResponse: Codable {
     let success: Bool
     let data: [QuizHistoryItem]?
     let message: String?
 }
 
+/// Model cho quiz history item
 struct QuizHistoryItem: Codable, Identifiable {
     let id: Int
     let categoryId: Int
@@ -1097,12 +1257,14 @@ struct QuizHistoryItem: Codable, Identifiable {
         case completedAt = "completed_at"
     }
     
+    /// Format thời gian theo mm:ss
     var formattedTime: String {
         let minutes = timeSpent / 60
         let seconds = timeSpent % 60
         return String(format: "%d:%02d", minutes, seconds)
     }
     
+    /// Format ngày tháng
     var formattedDate: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
@@ -1114,6 +1276,7 @@ struct QuizHistoryItem: Codable, Identifiable {
         return completedAt
     }
     
+    /// Emoji theo kết quả
     var gradeEmoji: String {
         switch accuracy {
         case 90...100: return "🌟"
@@ -1125,12 +1288,14 @@ struct QuizHistoryItem: Codable, Identifiable {
     }
 }
 
+/// Response cho quiz statistics API
 struct QuizStatisticsResponse: Codable {
     let success: Bool
     let data: QuizStatistics?
     let message: String?
 }
 
+/// Model cho quiz statistics
 struct QuizStatistics: Codable {
     let totalQuizzes: Int
     let totalQuestions: Int
@@ -1158,6 +1323,7 @@ struct QuizStatistics: Codable {
         case averageTimePerQuestion = "average_time_per_question"
     }
     
+    /// Format tổng thời gian thành h:mm
     var formattedTotalTime: String {
         let hours = totalTimeSpent / 3600
         let minutes = (totalTimeSpent % 3600) / 60
@@ -1169,6 +1335,7 @@ struct QuizStatistics: Codable {
         }
     }
     
+    /// Đánh giá performance level
     var performanceLevel: String {
         switch averageAccuracy {
         case 90...100: return "Xuất sắc"
@@ -1179,6 +1346,7 @@ struct QuizStatistics: Codable {
         }
     }
     
+    /// Màu sắc theo performance
     var performanceColor: Color {
         switch averageAccuracy {
         case 90...100: return .green
